@@ -2,7 +2,7 @@
 from flask import Flask, render_template_string, request
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
 import locale
 import json
@@ -20,7 +20,19 @@ app = Flask(__name__)
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+# Variáveis globais para o sistema de Cache (Memória Rápida)
+_CACHE_DADOS = None
+_CACHE_TEMPO = None
+
 def carregar_dados():
+    global _CACHE_DADOS, _CACHE_TEMPO
+    
+    # Se os dados já estiverem na memória e tiverem menos de 10 minutos, usamos os dados guardados!
+    if _CACHE_DADOS is not None and _CACHE_TEMPO is not None:
+        if datetime.now() - _CACHE_TEMPO < timedelta(minutes=10):
+            print("🚀 A usar dados da memória (Cache)!")
+            return _CACHE_DADOS.copy()
+
     try:
         # Usando a biblioteca pytds.
         with pytds.connect(
@@ -68,6 +80,10 @@ def carregar_dados():
         
         df['ano'] = df['dt_dashboard'].dt.year
         df['mes_num'] = df['dt_dashboard'].dt.month
+
+        # Guardar os dados processados na memória antes de os devolver
+        _CACHE_DADOS = df.copy()
+        _CACHE_TEMPO = datetime.now()
 
         return df
 
