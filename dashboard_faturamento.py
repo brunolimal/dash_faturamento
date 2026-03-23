@@ -22,11 +22,13 @@ def formatar_moeda(valor):
 
 def formatar_k_m(valor):
     """Formata valores grandes para K (milhares) ou M (milhões) nos gráficos"""
+    if pd.isna(valor) or valor == 0:
+        return ""
     if valor >= 1000000:
-        return f"{valor/1000000:.1f}M"
+        return f"R$ {valor/1000000:.1f}M"
     elif valor >= 1000:
-        return f"{valor/1000:.1f}K"
-    return str(int(valor))
+        return f"R$ {valor/1000:.1f}K"
+    return f"R$ {int(valor)}"
 
 # Variáveis globais para o sistema de Cache (Memória Rápida)
 _CACHE_DADOS = None
@@ -88,6 +90,17 @@ def carregar_dados():
         
         df['ano'] = df['dt_dashboard'].dt.year
         df['mes_num'] = df['dt_dashboard'].dt.month
+        
+        # Tags exatas para Venda e Locação baseadas no fl_origem
+        if 'fl_origem' in df.columns:
+            df['origem_upper'] = df['fl_origem'].astype(str).str.strip().str.upper()
+            tags_venda = ['VD', 'DV', 'IL', 'VENDA DE LOCAÇÃO']
+            tags_locacao = ['FL', 'SL']
+            df['is_venda'] = df['origem_upper'].isin(tags_venda)
+            df['is_locacao'] = df['origem_upper'].isin(tags_locacao)
+        else:
+            df['is_venda'] = False
+            df['is_locacao'] = False
 
         # Guardar os dados processados na memória antes de os devolver
         _CACHE_DADOS = df.copy()
@@ -149,15 +162,23 @@ HTML_TEMPLATE = """
         .kpi-value { font-size: 28px; font-weight: 800; margin: 0; color: var(--text-main); letter-spacing: -1px; }
         .kpi-sub { font-size: 15px; font-weight: 700; margin: 0; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        .graficos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px; }
-        .grafico-card { background: var(--card-bg); padding: 25px; border-radius: var(--border-radius); box-shadow: var(--shadow); height: 430px; }
-        .full-width { grid-column: 1 / -1; height: 480px; }
+        /* Novo layout de Gráficos (2/3 Mensal, 1/3 Anual) */
+        .graficos-grid-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 25px; margin-bottom: 25px; }
+        .grafico-card { background: var(--card-bg); padding: 25px; border-radius: var(--border-radius); box-shadow: var(--shadow); height: 380px; display: flex; flex-direction: column; }
+        .grafico-card-title { font-size: 16px; font-weight: 700; color: var(--text-main); margin-bottom: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
+        
+        .full-width-grid { display: grid; grid-template-columns: 1fr; margin-bottom: 25px; }
+        .grafico-card-full { height: 450px; background: var(--card-bg); padding: 25px; border-radius: var(--border-radius); box-shadow: var(--shadow); }
 
         .status-footer { margin-top: 35px; text-align: center; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; }
         .pulse { width: 10px; height: 10px; background-color: var(--success); border-radius: 50%; animation: pulse-animation 2s infinite; }
         @keyframes pulse-animation { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
-        @media (max-width: 1024px) { .graficos-grid { grid-template-columns: 1fr; } .header-container { flex-direction: column; padding: 20px; gap: 20px; } .filtros-card { width: 100%; justify-content: center; } .full-width { grid-column: auto; } }
+        @media (max-width: 1024px) { 
+            .graficos-grid-layout { grid-template-columns: 1fr; } 
+            .header-container { flex-direction: column; padding: 20px; gap: 20px; } 
+            .filtros-card { width: 100%; justify-content: center; } 
+        }
     </style>
 </head>
 <body>
@@ -220,11 +241,36 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <!-- Layout com 3 Gráficos -->
-    <div class="graficos-grid">
-        <div class="grafico-card"><div id="g1" style="width: 100%; height: 100%;"></div></div>
-        <div class="grafico-card"><div id="g2" style="width: 100%; height: 100%;"></div></div>
-        <div class="grafico-card full-width"><div id="g3" style="width: 100%; height: 100%;"></div></div>
+    <!-- Seção: Locação -->
+    <div class="graficos-grid-layout">
+        <div class="grafico-card">
+            <div class="grafico-card-title">Locação Mensal</div>
+            <div id="g_loc_mes" style="width: 100%; flex-grow: 1;"></div>
+        </div>
+        <div class="grafico-card">
+            <div class="grafico-card-title">Locação Anual</div>
+            <div id="g_loc_ano" style="width: 100%; flex-grow: 1;"></div>
+        </div>
+    </div>
+
+    <!-- Seção: Venda -->
+    <div class="graficos-grid-layout">
+        <div class="grafico-card">
+            <div class="grafico-card-title">Venda Mensal</div>
+            <div id="g_ven_mes" style="width: 100%; flex-grow: 1;"></div>
+        </div>
+        <div class="grafico-card">
+            <div class="grafico-card-title">Venda Anual</div>
+            <div id="g_ven_ano" style="width: 100%; flex-grow: 1;"></div>
+        </div>
+    </div>
+
+    <!-- Seção: Top Clientes -->
+    <div class="full-width-grid">
+        <div class="grafico-card-full">
+            <div class="grafico-card-title">Top 10 Clientes (Volume em R$)</div>
+            <div id="g_top" style="width: 100%; height: 90%;"></div>
+        </div>
     </div>
 
     <div class="status-footer">
@@ -239,13 +285,17 @@ HTML_TEMPLATE = """
         }
 
         var config = {responsive: true, displayModeBar: false};
-        var fig1_data = {{ fig1_json | safe }};
-        var fig2_data = {{ fig2_json | safe }};
-        var fig3_data = {{ fig3_json | safe }};
+        var g_loc_mes_data = {{ fig_loc_mes_json | safe }};
+        var g_loc_ano_data = {{ fig_loc_ano_json | safe }};
+        var g_ven_mes_data = {{ fig_ven_mes_json | safe }};
+        var g_ven_ano_data = {{ fig_ven_ano_json | safe }};
+        var g_top_data = {{ fig_top_json | safe }};
         
-        Plotly.newPlot('g1', fig1_data.data, fig1_data.layout, config);
-        Plotly.newPlot('g2', fig2_data.data, fig2_data.layout, config);
-        Plotly.newPlot('g3', fig3_data.data, fig3_data.layout, config);
+        Plotly.newPlot('g_loc_mes', g_loc_mes_data.data, g_loc_mes_data.layout, config);
+        Plotly.newPlot('g_loc_ano', g_loc_ano_data.data, g_loc_ano_data.layout, config);
+        Plotly.newPlot('g_ven_mes', g_ven_mes_data.data, g_ven_mes_data.layout, config);
+        Plotly.newPlot('g_ven_ano', g_ven_ano_data.data, g_ven_ano_data.layout, config);
+        Plotly.newPlot('g_top', g_top_data.data, g_top_data.layout, config);
     </script>
 </body>
 </html>
@@ -265,107 +315,117 @@ def dashboard():
     ano_sel = request.args.get("ano", ano_padrao)
     mes_sel = request.args.get("mes", "all")
 
-    # df_f = DataFrame filtrado pelo Ano e Mês selecionados
+    # -------------------------------------------------------------
+    # 1. CÁLCULOS DOS CARDS (Topos da tela) - Usa o filtro completo
+    # -------------------------------------------------------------
     df_f = df.copy()
     if ano_sel != "all": df_f = df_f[df_f["ano"] == int(ano_sel)]
     if mes_sel != "all": df_f = df_f[df_f["mes_num"] == int(mes_sel)]
 
-    # 📊 CÁLCULOS KPI
     total_faturamento = df_f["vl_faturamento_bruto"].sum()
     qtd_nfs = len(df_f)
     media = total_faturamento / qtd_nfs if qtd_nfs > 0 else 0
     
-    # 🔍 CÁLCULO EXATO DE VENDAS VS LOCAÇÃO (Baseado na regra 'fl_origem')
-    faturamento_vendas = 0
-    faturamento_locacao = 0
-
-    if 'fl_origem' in df_f.columns:
-        df_origem = df_f['fl_origem'].astype(str).str.strip().str.upper()
-        
-        tags_venda = ['VD', 'DV', 'IL', 'VENDA DE LOCAÇÃO']
-        tags_locacao = ['FL', 'SL']
-        
-        mask_venda = df_origem.isin(tags_venda)
-        mask_locacao = df_origem.isin(tags_locacao)
-        
-        faturamento_vendas = df_f[mask_venda]["vl_faturamento_bruto"].sum()
-        faturamento_locacao = df_f[mask_locacao]["vl_faturamento_bruto"].sum()
+    faturamento_vendas = df_f[df_f['is_venda']]["vl_faturamento_bruto"].sum()
+    faturamento_locacao = df_f[df_f['is_locacao']]["vl_faturamento_bruto"].sum()
         
     if not df_f.empty and total_faturamento > 0:
         top_c_nome = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().idxmax()
     else:
         top_c_nome = "Nenhum Cliente Registrado"
 
+    # Layout unificado padrão do Plotly para evitar bugs de barras esmagadas
     layout_moderno = dict(
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(family="Inter, sans-serif", color="#475569", size=13),
-        margin=dict(l=20, r=20, t=50, b=20),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="white", font_size=14, font_family="Inter")
+        font=dict(family="Inter, sans-serif", color="#475569", size=12),
+        margin=dict(l=10, r=10, t=10, b=10),
+        hovermode="x unified"
     )
 
-    # 📈 GRÁFICO 1: Faturamento Mensal (Resumo do ano selecionado)
-    df_mes = df_f.groupby('mes_num')["vl_faturamento_bruto"].sum().reset_index()
     meses_map = {1:'Jan', 2:'Fev', 3:'Mar', 4:'Abr', 5:'Mai', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Set', 10:'Out', 11:'Nov', 12:'Dez'}
-    df_mes['mes_nome'] = df_mes['mes_num'].map(meses_map)
-    df_mes = df_mes.sort_values('mes_num')
-    
-    fig1 = px.bar(df_mes, x="mes_nome", y="vl_faturamento_bruto", title="<b>Faturamento Mensal</b> (Ano Selecionado)")
-    fig1.update_traces(
-        marker_color="#0ea5e9", 
-        text=df_mes['vl_faturamento_bruto'].apply(formatar_k_m),
-        textposition="outside",
-        textfont=dict(size=11, color="#334155"),
-        cliponaxis=False
-    )
-    fig1.update_layout(**layout_moderno)
-    if not df_mes.empty:
-        fig1.update_layout(yaxis=dict(range=[0, df_mes['vl_faturamento_bruto'].max() * 1.2]))
-    fig1.update_yaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0", showticklabels=False)
-    fig1.update_xaxes(title="", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
 
-    # 📈 GRÁFICO 2: Evolução Anual (Todos os anos lado a lado)
-    # Usa o df base ignorando o filtro de ano, mas respeitando o de mês
-    df_ano_base = df.copy()
+    # -------------------------------------------------------------
+    # 2. GRÁFICOS MENSAIS (Ignora filtro de mês, respeita o Ano)
+    # -------------------------------------------------------------
+    df_mensal_base = df.copy()
+    if ano_sel != "all":
+        df_mensal_base = df_mensal_base[df_mensal_base["ano"] == int(ano_sel)]
+
+    # -> Locação Mensal
+    df_loc_mes = df_mensal_base[df_mensal_base['is_locacao']].groupby('mes_num')["vl_faturamento_bruto"].sum().reset_index()
+    df_loc_mes['mes_nome'] = df_loc_mes['mes_num'].map(meses_map)
+    df_loc_mes = df_loc_mes.sort_values('mes_num')
+    
+    fig_loc_mes = px.bar(df_loc_mes, x="mes_nome", y="vl_faturamento_bruto")
+    fig_loc_mes.update_traces(
+        marker_color="#0ea5e9", # Azul
+        text=df_loc_mes['vl_faturamento_bruto'].apply(formatar_k_m),
+        textposition="auto" # "auto" previne que a barra desapareça
+    )
+    fig_loc_mes.update_layout(**layout_moderno)
+    fig_loc_mes.update_yaxes(visible=False, showticklabels=False) # Esconde eixo Y para ficar limpo
+    fig_loc_mes.update_xaxes(title="")
+
+    # -> Venda Mensal
+    df_ven_mes = df_mensal_base[df_mensal_base['is_venda']].groupby('mes_num')["vl_faturamento_bruto"].sum().reset_index()
+    df_ven_mes['mes_nome'] = df_ven_mes['mes_num'].map(meses_map)
+    df_ven_mes = df_ven_mes.sort_values('mes_num')
+    
+    fig_ven_mes = px.bar(df_ven_mes, x="mes_nome", y="vl_faturamento_bruto")
+    fig_ven_mes.update_traces(
+        marker_color="#10b981", # Verde
+        text=df_ven_mes['vl_faturamento_bruto'].apply(formatar_k_m),
+        textposition="auto"
+    )
+    fig_ven_mes.update_layout(**layout_moderno)
+    fig_ven_mes.update_yaxes(visible=False, showticklabels=False)
+    fig_ven_mes.update_xaxes(title="")
+
+    # -------------------------------------------------------------
+    # 3. GRÁFICOS ANUAIS (Ignora filtro de ano, respeita o Mês)
+    # -------------------------------------------------------------
+    df_anual_base = df.copy()
     if mes_sel != "all":
-        df_ano_base = df_ano_base[df_ano_base["mes_num"] == int(mes_sel)]
-    df_ano = df_ano_base.groupby('ano')["vl_faturamento_bruto"].sum().reset_index()
-    
-    fig2 = px.bar(df_ano, x="ano", y="vl_faturamento_bruto", title="<b>Evolução Anual</b> (Comparativo de Anos)")
-    fig2.update_traces(
-        marker_color="#10b981", 
-        text=df_ano['vl_faturamento_bruto'].apply(formatar_k_m),
-        textposition="outside",
-        textfont=dict(size=11, color="#334155"),
-        cliponaxis=False
-    )
-    fig2.update_layout(**layout_moderno)
-    if not df_ano.empty:
-        fig2.update_layout(yaxis=dict(range=[0, df_ano['vl_faturamento_bruto'].max() * 1.2]))
-    fig2.update_yaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0", showticklabels=False)
-    fig2.update_xaxes(title="", type='category', gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
-    
-    # 📈 GRÁFICO 3: Top 10 Clientes
-    df_top = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().nlargest(10).reset_index()
-    fig3 = px.bar(df_top, x="vl_faturamento_bruto", y="nm_cliente", orientation='h', title="<b>Top 10 Clientes</b> (Volume em R$)")
-    fig3.update_traces(
-        marker_color="#8b5cf6", 
-        marker_line_width=0, 
-        opacity=0.9,
-        text=df_top['vl_faturamento_bruto'].apply(formatar_k_m),
-        textposition="outside",
-        textfont=dict(size=11, color="#334155"),
-        cliponaxis=False
-    )
-    fig3.update_layout(yaxis={'categoryorder':'total ascending'}, **layout_moderno)
-    if not df_top.empty:
-        fig3.update_layout(xaxis=dict(range=[0, df_top['vl_faturamento_bruto'].max() * 1.2]))
-    fig3.update_xaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0", showticklabels=False)
-    fig3.update_yaxes(title="", tickfont=dict(size=11))
+        df_anual_base = df_anual_base[df_anual_base["mes_num"] == int(mes_sel)]
 
-    meses = [("all", "Todos os Meses"), (1, "Janeiro"), (2, "Fevereiro"), (3, "Março"), (4, "Abril"), (5, "Maio"), (6, "Junho"), 
-             (7, "Julho"), (8, "Agosto"), (9, "Setembro"), (10, "Outubro"), (11, "Novembro"), (12, "Dezembro")]
+    # -> Locação Anual
+    df_loc_ano = df_anual_base[df_anual_base['is_locacao']].groupby('ano')["vl_faturamento_bruto"].sum().reset_index()
+    fig_loc_ano = px.bar(df_loc_ano, x="ano", y="vl_faturamento_bruto")
+    fig_loc_ano.update_traces(
+        marker_color="#0ea5e9", # Azul
+        text=df_loc_ano['vl_faturamento_bruto'].apply(formatar_k_m),
+        textposition="auto"
+    )
+    fig_loc_ano.update_layout(**layout_moderno)
+    fig_loc_ano.update_yaxes(visible=False, showticklabels=False)
+    fig_loc_ano.update_xaxes(title="", type='category') # 'category' impede que o ano apareça quebrado ex: 2024.5
+
+    # -> Venda Anual
+    df_ven_ano = df_anual_base[df_anual_base['is_venda']].groupby('ano')["vl_faturamento_bruto"].sum().reset_index()
+    fig_ven_ano = px.bar(df_ven_ano, x="ano", y="vl_faturamento_bruto")
+    fig_ven_ano.update_traces(
+        marker_color="#10b981", # Verde
+        text=df_ven_ano['vl_faturamento_bruto'].apply(formatar_k_m),
+        textposition="auto"
+    )
+    fig_ven_ano.update_layout(**layout_moderno)
+    fig_ven_ano.update_yaxes(visible=False, showticklabels=False)
+    fig_ven_ano.update_xaxes(title="", type='category')
+
+    # -------------------------------------------------------------
+    # 4. GRÁFICO TOP 10 CLIENTES (Usa o filtro completo)
+    # -------------------------------------------------------------
+    df_top = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().nlargest(10).reset_index()
+    fig_top = px.bar(df_top, x="vl_faturamento_bruto", y="nm_cliente", orientation='h')
+    fig_top.update_traces(
+        marker_color="#8b5cf6", # Roxo
+        text=df_top['vl_faturamento_bruto'].apply(formatar_k_m),
+        textposition="auto"
+    )
+    fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, **layout_moderno)
+    fig_top.update_xaxes(visible=False, showticklabels=False)
+    fig_top.update_yaxes(title="")
 
     return render_template_string(HTML_TEMPLATE,
         data_extracao=datetime.now().strftime('%d/%m/%Y às %H:%M'),
@@ -378,9 +438,11 @@ def dashboard():
         fat_locacao=formatar_moeda(faturamento_locacao),
         media=formatar_moeda(media),
         top_c_nome=str(top_c_nome)[:30], 
-        fig1_json=fig1.to_json(),
-        fig2_json=fig2.to_json(),
-        fig3_json=fig3.to_json()
+        fig_loc_mes_json=fig_loc_mes.to_json(),
+        fig_loc_ano_json=fig_loc_ano.to_json(),
+        fig_ven_mes_json=fig_ven_mes.to_json(),
+        fig_ven_ano_json=fig_ven_ano.to_json(),
+        fig_top_json=fig_top.to_json()
     )
 
 if __name__ == "__main__":
