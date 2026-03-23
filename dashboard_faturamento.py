@@ -344,6 +344,7 @@ def dashboard():
     )
 
     meses_map = {1:'Jan', 2:'Fev', 3:'Mar', 4:'Abr', 5:'Mai', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Set', 10:'Out', 11:'Nov', 12:'Dez'}
+    ordem_meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
     # -------------------------------------------------------------
     # 2. GRÁFICOS MENSAIS (Ignora filtro de mês, respeita o Ano)
@@ -355,32 +356,30 @@ def dashboard():
     # -> Locação Mensal
     df_loc_mes = df_mensal_base[df_mensal_base['is_locacao']].groupby('mes_num')["vl_faturamento_bruto"].sum().reset_index()
     df_loc_mes['mes_nome'] = df_loc_mes['mes_num'].map(meses_map)
-    df_loc_mes = df_loc_mes.sort_values('mes_num')
+    df_loc_mes['rotulo'] = df_loc_mes['vl_faturamento_bruto'].apply(formatar_k_m)
     
-    fig_loc_mes = px.bar(df_loc_mes, x="mes_nome", y="vl_faturamento_bruto")
+    fig_loc_mes = px.bar(df_loc_mes, x="mes_nome", y="vl_faturamento_bruto", text="rotulo")
     fig_loc_mes.update_traces(
         marker_color="#0ea5e9", # Azul
-        text=df_loc_mes['vl_faturamento_bruto'].apply(formatar_k_m),
-        textposition="auto" # "auto" previne que a barra desapareça
+        textposition="auto" 
     )
     fig_loc_mes.update_layout(**layout_moderno)
-    fig_loc_mes.update_yaxes(visible=False, showticklabels=False) # Esconde eixo Y para ficar limpo
-    fig_loc_mes.update_xaxes(title="")
+    fig_loc_mes.update_yaxes(visible=False, showticklabels=False) 
+    fig_loc_mes.update_xaxes(title="", categoryorder='array', categoryarray=ordem_meses)
 
     # -> Venda Mensal
     df_ven_mes = df_mensal_base[df_mensal_base['is_venda']].groupby('mes_num')["vl_faturamento_bruto"].sum().reset_index()
     df_ven_mes['mes_nome'] = df_ven_mes['mes_num'].map(meses_map)
-    df_ven_mes = df_ven_mes.sort_values('mes_num')
+    df_ven_mes['rotulo'] = df_ven_mes['vl_faturamento_bruto'].apply(formatar_k_m)
     
-    fig_ven_mes = px.bar(df_ven_mes, x="mes_nome", y="vl_faturamento_bruto")
+    fig_ven_mes = px.bar(df_ven_mes, x="mes_nome", y="vl_faturamento_bruto", text="rotulo")
     fig_ven_mes.update_traces(
         marker_color="#10b981", # Verde
-        text=df_ven_mes['vl_faturamento_bruto'].apply(formatar_k_m),
         textposition="auto"
     )
     fig_ven_mes.update_layout(**layout_moderno)
     fig_ven_mes.update_yaxes(visible=False, showticklabels=False)
-    fig_ven_mes.update_xaxes(title="")
+    fig_ven_mes.update_xaxes(title="", categoryorder='array', categoryarray=ordem_meses)
 
     # -------------------------------------------------------------
     # 3. GRÁFICOS ANUAIS (Ignora filtro de ano, respeita o Mês)
@@ -391,36 +390,39 @@ def dashboard():
 
     # -> Locação Anual
     df_loc_ano = df_anual_base[df_anual_base['is_locacao']].groupby('ano')["vl_faturamento_bruto"].sum().reset_index()
-    fig_loc_ano = px.bar(df_loc_ano, x="ano", y="vl_faturamento_bruto")
+    df_loc_ano['rotulo'] = df_loc_ano['vl_faturamento_bruto'].apply(formatar_k_m)
+    
+    fig_loc_ano = px.bar(df_loc_ano, x="ano", y="vl_faturamento_bruto", text="rotulo")
     fig_loc_ano.update_traces(
         marker_color="#0ea5e9", # Azul
-        text=df_loc_ano['vl_faturamento_bruto'].apply(formatar_k_m),
         textposition="auto"
     )
     fig_loc_ano.update_layout(**layout_moderno)
     fig_loc_ano.update_yaxes(visible=False, showticklabels=False)
-    fig_loc_ano.update_xaxes(title="", type='category') # 'category' impede que o ano apareça quebrado ex: 2024.5
+    fig_loc_ano.update_xaxes(title="", type='category', categoryorder='category ascending') 
 
     # -> Venda Anual
     df_ven_ano = df_anual_base[df_anual_base['is_venda']].groupby('ano')["vl_faturamento_bruto"].sum().reset_index()
-    fig_ven_ano = px.bar(df_ven_ano, x="ano", y="vl_faturamento_bruto")
+    df_ven_ano['rotulo'] = df_ven_ano['vl_faturamento_bruto'].apply(formatar_k_m)
+    
+    fig_ven_ano = px.bar(df_ven_ano, x="ano", y="vl_faturamento_bruto", text="rotulo")
     fig_ven_ano.update_traces(
         marker_color="#10b981", # Verde
-        text=df_ven_ano['vl_faturamento_bruto'].apply(formatar_k_m),
         textposition="auto"
     )
     fig_ven_ano.update_layout(**layout_moderno)
     fig_ven_ano.update_yaxes(visible=False, showticklabels=False)
-    fig_ven_ano.update_xaxes(title="", type='category')
+    fig_ven_ano.update_xaxes(title="", type='category', categoryorder='category ascending')
 
     # -------------------------------------------------------------
     # 4. GRÁFICO TOP 10 CLIENTES (Usa o filtro completo)
     # -------------------------------------------------------------
     df_top = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().nlargest(10).reset_index()
-    fig_top = px.bar(df_top, x="vl_faturamento_bruto", y="nm_cliente", orientation='h')
+    df_top['rotulo'] = df_top['vl_faturamento_bruto'].apply(formatar_k_m)
+    
+    fig_top = px.bar(df_top, x="vl_faturamento_bruto", y="nm_cliente", orientation='h', text="rotulo")
     fig_top.update_traces(
         marker_color="#8b5cf6", # Roxo
-        text=df_top['vl_faturamento_bruto'].apply(formatar_k_m),
         textposition="auto"
     )
     fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, **layout_moderno)
