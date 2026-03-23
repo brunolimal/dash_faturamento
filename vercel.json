@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "version": 2,
   "builds": [
@@ -12,4 +13,20 @@
       "dest": "dashboard_faturamento.py"
     }
   ]
+=======
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dashboard_faturamento.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "dashboard_faturamento.py"
+    }
+  ]
+>>>>>>> ccd7db20d6c6e0e18f67675f8505677c3025e211
 }
