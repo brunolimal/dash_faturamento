@@ -20,6 +20,14 @@ app = Flask(__name__)
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def formatar_k_m(valor):
+    """Formata valores grandes para K (milhares) ou M (milhões) nos gráficos"""
+    if valor >= 1000000:
+        return f"{valor/1000000:.1f}M"
+    elif valor >= 1000:
+        return f"{valor/1000:.1f}K"
+    return str(int(valor))
+
 # Variáveis globais para o sistema de Cache (Memória Rápida)
 _CACHE_DADOS = None
 _CACHE_TEMPO = None
@@ -130,16 +138,16 @@ HTML_TEMPLATE = """
         .filtros-card { background: rgba(255, 255, 255, 0.1); padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(10px); }
         .filtros-card select { padding: 10px 18px; border-radius: 8px; border: none; background-color: white; font-family: 'Inter', sans-serif; font-weight: 600; color: var(--text-main); cursor: pointer; outline: none; }
 
-        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; margin-bottom: 35px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 35px; }
         .kpi-card { background: var(--card-bg); padding: 25px; border-radius: var(--border-radius); box-shadow: var(--shadow); position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; transition: transform 0.3s ease; }
         .kpi-card:hover { transform: translateY(-5px); }
         .kpi-icon { position: absolute; right: -10px; bottom: -15px; font-size: 100px; opacity: 0.04; color: var(--text-main); transition: transform 0.3s ease; }
         .kpi-card:hover .kpi-icon { transform: scale(1.1) rotate(-5deg); }
         .kpi-icon-small { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px; font-size: 18px; color: white; }
         .bg-primary { background: linear-gradient(135deg, #0ea5e9, #0284c7); } .bg-purple { background: linear-gradient(135deg, #a855f7, #7e22ce); } .bg-success { background: linear-gradient(135deg, #34d399, #059669); } .bg-warning { background: linear-gradient(135deg, #fbbf24, #d97706); }
-        .kpi-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
-        .kpi-value { font-size: 32px; font-weight: 800; margin: 0; color: var(--text-main); letter-spacing: -1px; }
-        .kpi-sub { font-size: 16px; font-weight: 700; margin: 0; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
+        .kpi-value { font-size: 28px; font-weight: 800; margin: 0; color: var(--text-main); letter-spacing: -1px; }
+        .kpi-sub { font-size: 15px; font-weight: 700; margin: 0; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .graficos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .grafico-card { background: var(--card-bg); padding: 25px; border-radius: var(--border-radius); box-shadow: var(--shadow); height: 480px; }
@@ -182,25 +190,31 @@ HTML_TEMPLATE = """
         <div class="kpi-card">
             <i class="fa-solid fa-money-bill-trend-up kpi-icon"></i>
             <div class="kpi-icon-small bg-primary"><i class="fa-solid fa-dollar-sign"></i></div>
-            <div class="kpi-title">Faturamento Bruto</div>
+            <div class="kpi-title">Fat. Bruto (Total)</div>
             <div class="kpi-value">{{ total_faturamento }}</div>
         </div>
         <div class="kpi-card">
-            <i class="fa-solid fa-file-invoice kpi-icon"></i>
-            <div class="kpi-icon-small bg-purple"><i class="fa-solid fa-file-invoice"></i></div>
-            <div class="kpi-title">Qtd. de Notas Emitidas</div>
-            <div class="kpi-value">{{ qtd_nfs }}</div>
+            <i class="fa-solid fa-tags kpi-icon"></i>
+            <div class="kpi-icon-small bg-success"><i class="fa-solid fa-cart-shopping"></i></div>
+            <div class="kpi-title">Vendas</div>
+            <div class="kpi-value">{{ fat_vendas }}</div>
+        </div>
+        <div class="kpi-card">
+            <i class="fa-solid fa-truck-fast kpi-icon"></i>
+            <div class="kpi-icon-small" style="background: linear-gradient(135deg, #f43f5e, #e11d48);"><i class="fa-solid fa-dolly"></i></div>
+            <div class="kpi-title">Locação</div>
+            <div class="kpi-value">{{ fat_locacao }}</div>
         </div>
         <div class="kpi-card">
             <i class="fa-solid fa-chart-pie kpi-icon"></i>
-            <div class="kpi-icon-small bg-success"><i class="fa-solid fa-calculator"></i></div>
+            <div class="kpi-icon-small bg-warning"><i class="fa-solid fa-calculator"></i></div>
             <div class="kpi-title">Ticket Médio</div>
             <div class="kpi-value">{{ media }}</div>
         </div>
         <div class="kpi-card">
             <i class="fa-solid fa-building kpi-icon"></i>
-            <div class="kpi-icon-small bg-warning"><i class="fa-solid fa-crown"></i></div>
-            <div class="kpi-title">Top Cliente (Volume R$)</div>
+            <div class="kpi-icon-small bg-purple"><i class="fa-solid fa-crown"></i></div>
+            <div class="kpi-title">Top Cliente (R$)</div>
             <div class="kpi-sub" title="{{ top_c_nome }}">{{ top_c_nome }}</div>
         </div>
     </div>
@@ -254,6 +268,24 @@ def dashboard():
     qtd_nfs = len(df_f)
     media = total_faturamento / qtd_nfs if qtd_nfs > 0 else 0
     
+    # 🔍 CÁLCULO EXATO DE VENDAS VS LOCAÇÃO (Baseado na regra 'fl_origem')
+    faturamento_vendas = 0
+    faturamento_locacao = 0
+
+    if 'fl_origem' in df_f.columns:
+        # Padroniza tudo em maiúsculo para evitar bugs com os nomes
+        df_origem = df_f['fl_origem'].astype(str).str.strip().str.upper()
+        
+        # Tags exatas passadas por você
+        tags_venda = ['VD', 'DV', 'IL', 'VENDA DE LOCAÇÃO']
+        tags_locacao = ['FL', 'SL']
+        
+        mask_venda = df_origem.isin(tags_venda)
+        mask_locacao = df_origem.isin(tags_locacao)
+        
+        faturamento_vendas = df_f[mask_venda]["vl_faturamento_bruto"].sum()
+        faturamento_locacao = df_f[mask_locacao]["vl_faturamento_bruto"].sum()
+        
     if not df_f.empty and total_faturamento > 0:
         top_c_nome = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().idxmax()
     else:
@@ -263,23 +295,39 @@ def dashboard():
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(family="Inter, sans-serif", color="#475569", size=13),
-        margin=dict(l=10, r=10, t=50, b=10),
+        margin=dict(l=20, r=20, t=50, b=20),
         hovermode="x unified",
         hoverlabel=dict(bgcolor="white", font_size=14, font_family="Inter")
     )
 
     df_dia = df_f.groupby('dt_dashboard')["vl_faturamento_bruto"].sum().reset_index()
-    fig1 = px.area(df_dia, x="dt_dashboard", y="vl_faturamento_bruto", title="<b>Evolução Diária de Faturamento</b>")
-    fig1.update_traces(line=dict(color="#0ea5e9", width=4), fillcolor="rgba(14, 165, 233, 0.2)")
+    fig1 = px.area(df_dia, x="dt_dashboard", y="vl_faturamento_bruto", title="<b>Evolução Diária de Faturamento</b>", markers=True)
+    fig1.update_traces(
+        line=dict(color="#0ea5e9", width=4), 
+        fillcolor="rgba(14, 165, 233, 0.2)",
+        text=df_dia['vl_faturamento_bruto'].apply(formatar_k_m), # Exibe o rótulo de dados no gráfico
+        textposition="top center",
+        textfont=dict(size=11, color="#334155"),
+        mode="lines+markers+text"
+    )
     fig1.update_layout(**layout_moderno)
+    fig1.update_layout(yaxis=dict(range=[0, df_dia['vl_faturamento_bruto'].max() * 1.15])) # Espaço pro rótulo
     fig1.update_yaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
     fig1.update_xaxes(title="", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
     
     df_top = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().nlargest(10).reset_index()
     fig2 = px.bar(df_top, x="vl_faturamento_bruto", y="nm_cliente", orientation='h', title="<b>Top 10 Clientes</b> (Volume em R$)")
-    fig2.update_traces(marker_color="#8b5cf6", marker_line_width=0, opacity=0.9)
+    fig2.update_traces(
+        marker_color="#8b5cf6", 
+        marker_line_width=0, 
+        opacity=0.9,
+        text=df_top['vl_faturamento_bruto'].apply(formatar_k_m), # Exibe o rótulo de dados nas barras
+        textposition="outside",
+        textfont=dict(size=11, color="#334155")
+    )
     fig2.update_layout(yaxis={'categoryorder':'total ascending'}, **layout_moderno)
-    fig2.update_xaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
+    fig2.update_layout(xaxis=dict(range=[0, df_top['vl_faturamento_bruto'].max() * 1.2])) # Espaço pro rótulo
+    fig2.update_xaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0", showticklabels=False)
     fig2.update_yaxes(title="", tickfont=dict(size=11))
 
     meses = [("all", "Todos os Meses"), (1, "Janeiro"), (2, "Fevereiro"), (3, "Março"), (4, "Abril"), (5, "Maio"), (6, "Junho"), 
@@ -292,9 +340,10 @@ def dashboard():
         meses=meses,
         mes_sel=mes_sel,
         total_faturamento=formatar_moeda(total_faturamento),
-        qtd_nfs=qtd_nfs,
+        fat_vendas=formatar_moeda(faturamento_vendas),
+        fat_locacao=formatar_moeda(faturamento_locacao),
         media=formatar_moeda(media),
-        top_c_nome=str(top_c_nome)[:35], 
+        top_c_nome=str(top_c_nome)[:30], 
         fig1_json=fig1.to_json(),
         fig2_json=fig2.to_json()
     )
