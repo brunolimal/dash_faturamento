@@ -3,52 +3,47 @@ from flask import Flask, render_template_string, request
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import pyodbc
 import traceback
 import locale
 import json
 
-# Configuração para Português
+# Conexão 100% Python que não precisa de driver da Microsoft no servidor (Render)
+import pytds 
+
 try:
-    locale.setlocale(locale.LC_ALL, 'pt_PT.UTF-8')
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
 except:
-    try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-    except:
-        locale.setlocale(locale.LC_ALL, '') 
+    locale.setlocale(locale.LC_ALL, '') 
 
 app = Flask(__name__)
 
 def formatar_moeda(valor):
-    """Auxiliar para formatar números monetários"""
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def carregar_dados():
     try:
-        # Ligação original e fiável do Windows
-        conn_str = (
-            "DRIVER={ODBC Driver 18 for SQL Server};"
-            "SERVER=bi.srv.sisloc.com;"
-            "DATABASE=DW;"
-            "UID=dw_maisescoramentos;"
-            "PWD={#45%maisWt};"
-            "Encrypt=no;"
-            "TrustServerCertificate=yes;"
-        )
-
-        query = """
-        EXEC DW_API '1A44894D6D3E39329B75F827426E2EA4',
-        '
-        SELECT 
-            nf.*, 
-            p_cliente.nm_pessoa AS nm_cliente
-        FROM nf
-        JOIN pessoa p_cliente ON nf.cd_pessoa = p_cliente.cd_pessoa
-        '
-        """
-
-        with pyodbc.connect(conn_str) as conn:
-            df = pd.read_sql(query, conn)
+        # Usando a biblioteca pytds que vai funcionar perfeitamente na nuvem (Render)
+        with pytds.connect(
+            server='bi.srv.sisloc.com',
+            user='dw_maisescoramentos',
+            password='{#45%maisWt}',
+            database='DW'
+        ) as conn:
+            with conn.cursor() as cursor:
+                query = """
+                EXEC DW_API '1A44894D6D3E39329B75F827426E2EA4',
+                '
+                SELECT 
+                    nf.*, 
+                    p_cliente.nm_pessoa AS nm_cliente
+                FROM nf
+                JOIN pessoa p_cliente ON nf.cd_pessoa = p_cliente.cd_pessoa
+                '
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                colunas = [column[0] for column in cursor.description]
+                df = pd.DataFrame(rows, columns=colunas)
 
         if df.empty:
             return pd.DataFrame()
@@ -71,12 +66,13 @@ def carregar_dados():
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <!-- Atualização automática a cada 10 minutos (600s) -->
     <meta http-equiv="refresh" content="600">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mais Escoramentos | Inteligência de Faturação</title>
+    <title>Mais Escoramentos | Faturamento</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -135,7 +131,7 @@ HTML_TEMPLATE = """
 
     <div class="header-container">
         <div class="header-title">
-            <h1><i class="fa-solid fa-chart-line" style="margin-right: 10px; color: #38bdf8;"></i> Inteligência de Faturação</h1>
+            <h1><i class="fa-solid fa-chart-line" style="margin-right: 10px; color: #38bdf8;"></i> Inteligência de Faturamento</h1>
             <p>Painel de Resultados • Mais Escoramentos</p>
         </div>
         
@@ -158,7 +154,7 @@ HTML_TEMPLATE = """
         <div class="kpi-card">
             <i class="fa-solid fa-money-bill-trend-up kpi-icon"></i>
             <div class="kpi-icon-small bg-primary"><i class="fa-solid fa-dollar-sign"></i></div>
-            <div class="kpi-title">Faturação Bruta</div>
+            <div class="kpi-title">Faturamento Bruto</div>
             <div class="kpi-value">{{ total_faturamento }}</div>
         </div>
         <div class="kpi-card">
@@ -188,7 +184,7 @@ HTML_TEMPLATE = """
 
     <div class="status-footer">
         <div class="pulse"></div>
-        <span>Servidor Local Seguro • Última extração: {{ data_extracao }} • Próxima atualização em 10 min</span>
+        <span>Nuvem 24h • Última extração: {{ data_extracao }} • Atualização em 10 min</span>
     </div>
 
     <script>
@@ -213,9 +209,9 @@ def dashboard():
     try:
         df = carregar_dados()
         if df.empty:
-            return "<h2>⚠️ A base de dados não retornou dados.</h2>", 200
+            return "<h2>⚠️ O banco não retornou dados.</h2>", 200
     except Exception as e:
-        return f"<h2>⚠️ Erro na ligação com a base de dados:</h2><p>{str(e)}</p>", 500
+        return f"<h2>⚠️ Erro ao conectar com o banco:</h2><p>{str(e)}</p>", 500
 
     anos = sorted(df["ano"].unique().tolist(), reverse=True)
     ano_padrao = str(anos[0]) if anos else "all"
@@ -233,7 +229,7 @@ def dashboard():
     if not df_f.empty and total_faturamento > 0:
         top_c_nome = df_f.groupby("nm_cliente")["vl_faturamento_bruto"].sum().idxmax()
     else:
-        top_c_nome = "Nenhum Cliente Registado"
+        top_c_nome = "Nenhum Cliente Registrado"
 
     layout_moderno = dict(
         plot_bgcolor='rgba(0,0,0,0)',
@@ -245,7 +241,7 @@ def dashboard():
     )
 
     df_dia = df_f.groupby('dt_dashboard')["vl_faturamento_bruto"].sum().reset_index()
-    fig1 = px.area(df_dia, x="dt_dashboard", y="vl_faturamento_bruto", title="<b>Evolução Diária da Faturação</b>")
+    fig1 = px.area(df_dia, x="dt_dashboard", y="vl_faturamento_bruto", title="<b>Evolução Diária de Faturamento</b>")
     fig1.update_traces(line=dict(color="#0ea5e9", width=4), fillcolor="rgba(14, 165, 233, 0.2)")
     fig1.update_layout(**layout_moderno)
     fig1.update_yaxes(title="", tickprefix="R$ ", gridcolor="#f1f5f9", zerolinecolor="#e2e8f0")
@@ -276,5 +272,4 @@ def dashboard():
     )
 
 if __name__ == "__main__":
-    # O host="0.0.0.0" permite que qualquer pessoa na rede aceda
     app.run(host="0.0.0.0", port=5000, debug=False)
