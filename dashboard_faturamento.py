@@ -22,11 +22,11 @@ def formatar_moeda(valor):
 
 def carregar_dados():
     try:
-        # Usando a biblioteca pytds que vai funcionar perfeitamente na nuvem (Render)
+        # Usando a biblioteca pytds. Removemos as chaves {} da senha, que eram exclusivas do pyodbc.
         with pytds.connect(
             server='bi.srv.sisloc.com',
             user='dw_maisescoramentos',
-            password='{#45%maisWt}',
+            password='#45%maisWt',
             database='DW'
         ) as conn:
             with conn.cursor() as cursor:
