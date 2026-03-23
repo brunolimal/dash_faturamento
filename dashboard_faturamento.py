@@ -22,7 +22,7 @@ def formatar_moeda(valor):
 
 def carregar_dados():
     try:
-        # Usando a biblioteca pytds. Removemos as chaves {} da senha, que eram exclusivas do pyodbc.
+        # Usando a biblioteca pytds.
         with pytds.connect(
             server='bi.srv.sisloc.com',
             user='dw_maisescoramentos',
@@ -30,7 +30,9 @@ def carregar_dados():
             database='DW'
         ) as conn:
             with conn.cursor() as cursor:
+                # 1ª Defesa: SET NOCOUNT ON; evita mensagens de "linhas afetadas" que confundem o pytds
                 query = """
+                SET NOCOUNT ON;
                 EXEC DW_API '1A44894D6D3E39329B75F827426E2EA4',
                 '
                 SELECT 
@@ -41,9 +43,19 @@ def carregar_dados():
                 '
                 """
                 cursor.execute(query)
-                rows = cursor.fetchall()
-                colunas = [column[0] for column in cursor.description]
-                df = pd.DataFrame(rows, columns=colunas)
+                
+                # 2ª Defesa: Pular qualquer mensagem de status vazia até chegar na tabela real
+                while cursor.description is None:
+                    if not cursor.nextset():
+                        break
+                
+                # Se achou uma tabela com colunas, extrai os dados
+                if cursor.description:
+                    rows = cursor.fetchall()
+                    colunas = [column[0] for column in cursor.description]
+                    df = pd.DataFrame(rows, columns=colunas)
+                else:
+                    df = pd.DataFrame()
 
         if df.empty:
             return pd.DataFrame()
