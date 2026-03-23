@@ -427,6 +427,10 @@ def dashboard():
     fig_top.update_xaxes(visible=False, showticklabels=False)
     fig_top.update_yaxes(title="")
 
+    # RECRIADO AQUI: Lista de meses para o Filtro HTML! 
+    meses = [("all", "Todos os Meses"), (1, "Janeiro"), (2, "Fevereiro"), (3, "Março"), (4, "Abril"), (5, "Maio"), (6, "Junho"), 
+             (7, "Julho"), (8, "Agosto"), (9, "Setembro"), (10, "Outubro"), (11, "Novembro"), (12, "Dezembro")]
+
     return render_template_string(HTML_TEMPLATE,
         data_extracao=datetime.now().strftime('%d/%m/%Y às %H:%M'),
         anos=anos,
